@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<link rel="stylesheet" type="text/css" href="css/style.css" />
+	</head>
+	<body>
+		<div id="console">
+			<div id="history">
+				<ul id="items" data-bind="foreach: history">
+					<li data-bind="html: $data"></li>
+				</ul>
+			</div>
+			<div id="cursor">
+				<span id="prompt">[<span class="blue">guest</span>@<span class="orange">aaronnech.com</span> <span id="directory" class='yellow' data-bind="text: pwd"></span>]$ </span>
+				<span id="command" data-bind="text: typed"></span>
+				<span id="blink">&#9608;</span>
+			</div>
+		</div>
+		<script type="text/javascript" src="js/knockout-3.0.0.js"></script>
+		<script type="text/javascript" src="js/command.js"></script>
+		<script type="text/javascript" src="js/model.js"></script>
+		<script type="text/javascript" src="js/console.js"></script>
+	</body>
+</html>
