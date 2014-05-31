@@ -19,7 +19,7 @@ EXECUTABLES.ls = function(vm, args, done) {
 		result += fileList[0].name;
 	}
 	for(var i = 1; i < fileList.length; i++) {
-		result += "<br />" + fileList[i].name;
+		result += "\n" + fileList[i].name;
 	}
 	done(result);
 }
@@ -66,11 +66,40 @@ EXECUTABLES.wget = function(vm, args, done) {
 	}
 }
 
+EXECUTABLES.kttext = function(vm, args, done) {
+	if(args.length <= 1) {
+		done("No file specified");
+	} else {
+		var contents = vm.getFileContents(args[1]);
+		if(contents != null)
+			vm.stdIn(contents);
+		vm.takeStdIn(function(input) {
+			if(vm.writeFile(args[1], input)) {
+				done("File " + args[1] + " written. " + input.length + " character(s).");
+			} else {
+				done("Error writing file " + args[1]);
+			}
+		});
+	}
+}
+
+EXECUTABLES.echo = function(vm, args, done) {
+	if(args.length <= 1 || args[1].length == 0) {
+		vm.takeStdIn(function(input) {
+			done(input);
+		});
+	} else {
+		done(args[1].replace(/\"/g, ""));
+	}
+}
+
 
 EXECUTABLES.PATH = {
 	'cat' : EXECUTABLES.cat,
 	'ls' : EXECUTABLES.ls,
 	'cd' : EXECUTABLES.cd,
 	'clear' : EXECUTABLES.clear,
-	'wget' : EXECUTABLES.wget
+	'wget' : EXECUTABLES.wget,
+	'kttext' : EXECUTABLES.kttext,
+	'echo' : EXECUTABLES.echo
 };

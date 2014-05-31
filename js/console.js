@@ -20,9 +20,16 @@ var ConsoleModel = function(files) {
 	var self = this;
 	var blinkShow = true;
 	var autoQueue = [];
+	var cursorActive = true;
+	var stdInActive = false;
+	var ctrlDhook = function() {};
+	var ctrlChook = function() {};
+	var currentCommand = null;
+	var insertionPoint = 0;
 
 	//public variables (hookable by view)
-	self.typed = new ko.observable("");
+	self.cursor = new ko.observable("");
+	self.stdIn = new ko.observable("");
 	self.history = ko.observableArray();
 	self.commandHistory = ko.observableArray();
 	self.fileSystem = new MODELS.FileSystem(files);
@@ -39,10 +46,19 @@ var ConsoleModel = function(files) {
 	var blinkCursor = function() {
 		blinkShow = !blinkShow;
 		if(blinkShow) {
-			document.getElementById('blink').style.display = 'inline-block';
+			if(cursorActive)
+				document.getElementById('blinkCursor').style.display = 'inline-block';
+			if(stdInActive)
+				document.getElementById('blinkStdIn').style.display = 'inline-block';
 		} else {
-			document.getElementById('blink').style.display = 'none';
+			document.getElementById('blinkCursor').style.display = 'none';
+			document.getElementById('blinkStdIn').style.display = 'none';
 		}
+
+		if(!cursorActive)
+			document.getElementById('blinkCursor').style.display = 'none';
+		if(!stdInActive)
+			document.getElementById('blinkStdIn').style.display = 'none';
 		setTimeout(blinkCursor, 500);
 	};
 
@@ -77,7 +93,7 @@ var ConsoleModel = function(files) {
 	*/
 	var getPromptText = function() {
 		return '[<span class="blue">guest</span>@<span class="orange">aaronnech.com</span> <span class="yellow">' +
-				 self.pwd() + '</span>]$ ' + self.typed();
+				 self.pwd() + '</span>]$ ' + self.cursor();
 	};
 
 	/**
@@ -98,7 +114,8 @@ var ConsoleModel = function(files) {
 	*/
 	var writeOut = function(sentence, delay, callback) {
 		if(sentence.length > 0) {
-			self.typed(self.typed() + sentence.substring(0, 1));
+			self.haltInput();
+			self.cursor(self.cursor() + sentence.substring(0, 1));
 			sentence = sentence.substring(1);
 
 			if(sentence.length > 0) {
@@ -120,17 +137,25 @@ var ConsoleModel = function(files) {
 	*/
 	window.onkeydown = function(e) {
 		var code = e.keyCode || e.which;
-		if(self.canType) {
+		if(cursorActive || stdInActive) {
 			if(code == 8) {
 				self.deleteChar();
 			} else if(code == 13) {
-				self.enterCommand();
+				self.enterKey();
 			} else if(code == 38) {
 				self.prevHistory();
 			} else if(code == 40) {
 				self.nextHistory();
 			} else if(code == 9) {
 				self.tabComplete();
+			} else if(code == 37) {
+				self.leftArrow();
+			} else if(code == 39) {
+				self.rightArrow();
+			} else if(code == 67 && e.ctrlKey) {
+				self.controlC();
+			} else if(code == 68 && e.ctrlKey) {
+				self.controlD();
 			}
 			if (code == 8 || code == 9 || code == 13 ||
 				 code == 46 || code == 38 || code == 40 || e.ctrlKey)
@@ -145,8 +170,11 @@ var ConsoleModel = function(files) {
 	*/
 	window.onkeypress = function(e) {
 		var code = e.keyCode || e.which;
-		if(self.canType) {
+		if(cursorActive || stdInActive) {
 			self.typeLetter(code);
+			if (code == 8 || code == 9 || code == 13 ||
+				 code == 46 || code == 38 || code == 40 || e.ctrlKey)
+	        	e.preventDefault();
 		}
 	};
 
@@ -160,14 +188,20 @@ var ConsoleModel = function(files) {
 	* @param code the key code of the letter to type
 	*/
 	self.typeLetter = function(code) {
-		self.typed(self.typed() + String.fromCharCode(code));
+		if(cursorActive)
+			self.cursor(self.cursor() + String.fromCharCode(code));
+		if(stdInActive)
+			self.stdIn(self.stdIn() + String.fromCharCode(code));
 	};
 
 	/**
 	* Deletes a single character from the end of the current prompt
 	*/
 	self.deleteChar = function() {
-		self.typed(self.typed().substring(0, self.typed().length - 1));
+		if(cursorActive)
+			self.cursor(self.cursor().substring(0, self.cursor().length - 1));
+		if(stdInActive)
+			self.stdIn(self.stdIn().substring(0, self.stdIn().length - 1));
 	};
 
 	/**
@@ -192,6 +226,7 @@ var ConsoleModel = function(files) {
 	*/
 	self.addToHistory = function(str) {
 		self.history.push(str);
+		window.scrollTo(0,document.body.scrollHeight);
 	};
 
 	/**
@@ -207,9 +242,9 @@ var ConsoleModel = function(files) {
 	self.prevHistory = function() {
 		if(self.historyIndex - 1 >= 0 && self.historyIndex - 1 < self.commandHistory().length) {
 			self.historyIndex -= 1;
-			self.typed(self.commandHistory()[self.historyIndex]);
+			self.cursor(self.commandHistory()[self.historyIndex]);
 		} else if(self.historyIndex >= 0 && self.historyIndex < self.commandHistory().length) {
-			self.typed(self.commandHistory()[self.historyIndex]);
+			self.cursor(self.commandHistory()[self.historyIndex]);
 		}
 	};
 
@@ -219,9 +254,9 @@ var ConsoleModel = function(files) {
 	self.nextHistory = function() {
 		if(self.historyIndex + 1 >= 0 && self.historyIndex + 1 < self.commandHistory().length) {
 			self.historyIndex += 1;
-			self.typed(self.commandHistory()[self.historyIndex]);		
+			self.cursor(self.commandHistory()[self.historyIndex]);		
 		} else if(self.historyIndex >= 0 && self.historyIndex < self.commandHistory().length) {
-			self.typed(self.commandHistory()[self.historyIndex]);
+			self.cursor(self.commandHistory()[self.historyIndex]);
 		}
 	};
 
@@ -232,30 +267,77 @@ var ConsoleModel = function(files) {
 		//todo
 	};
 
+	self.leftArrow = function() {
+		insertionPoint--;
+		insertionPoint = insertionPoint < 0 ? 0 : insertionPoint;
+	};
+
+	self.rightArrow = function() {
+		insertionPoint--;
+		if(cursorActive) {
+			insertionPoint = insertionPoint >  self.cursor().length ?  self.cursor().length : insertionPoint;
+		} else if(stdInActive) {
+			insertionPoint = insertionPoint >  self.stdIn().length ?  self.stdIn().length : insertionPoint;
+		}
+	};
+
+	self.controlD = function() {
+		ctrlDhook();
+		if(stdInActive) {
+			self.addToHistory(self.stdIn());
+			self.enableInput();
+		}
+	};
+
+	self.controlC = function() {
+		self.cursor(self.cursor() + '^C');
+		var prompt = getPromptText();
+		self.addToHistory(prompt);
+		self.cursor('');
+		if(currentCommand != null) {
+			currentCommand.stopped = true;
+			currentCommand = null;
+			self.enableInput();
+		}
+		ctrlChook();
+	};
+
+	self.enterKey = function() {
+		if(cursorActive) {
+			self.enterCommand();
+		} else if(stdInActive) {
+			self.stdIn(self.stdIn() + '\n');
+		}
+	}
+
 	/**
 	* enters the current prompt command
 	*/
 	self.enterCommand = function() {
-		self.canType = false;
+		cursorActive = false;
 		var prompt = getPromptText();
-		if(self.typed().length > 0) {
-			var cmd = new MODELS.Command(self, self.typed());
+		if(self.cursor().length > 0) {
+			var cmd = new MODELS.Command(self, self.cursor());
 			if(cmd.recognized()) {
+				currentCommand = cmd;
 				cmd.run(function(output) {
-					self.canType = true;
-					self.addToHistory(prompt);
-					self.addToHistory(output);
-					self.commandHistory.push(self.typed());
-					self.historyIndex = self.commandHistory().length;
-					self.typed('');
+					if(!cmd.stopped) {
+						cursorActive = true;
+						self.addToHistory(prompt);
+						self.addToHistory(output);
+						self.commandHistory.push(self.cursor());
+						self.historyIndex = self.commandHistory().length;
+						self.cursor('');
+					}
+					currentCommand = null;
 			 	});
 			} else {
-				self.canType = true;
+				cursorActive = true;
 				self.addToHistory(prompt);
 				self.addToHistory('Err: unrecognized command "' + cmd.commandName + '"');
-				self.commandHistory.push(self.typed());
+				self.commandHistory.push(self.cursor());
 				self.historyIndex = self.commandHistory().length;
-				self.typed('');
+				self.cursor('');
 			}
 		}
 	};
@@ -268,8 +350,10 @@ var ConsoleModel = function(files) {
 	self.getFileList = function(path) {
 		if(typeof path == 'undefined') { //cwd
 			return self.fileSystem.currentDirectory;
-		} else { //specific path
+		} else if(self.fileSystem.fileExists(path)) {
 			return self.fileSystem.getFile(path).file.content;
+		} else {
+			return null;
 		}
 	};
 
@@ -279,7 +363,11 @@ var ConsoleModel = function(files) {
 	* @param path the past to get content from
 	*/
 	self.getFileContents = function(path) {
-		return self.fileSystem.getFile(path).file.content;
+		if(self.fileSystem.fileExists(path)) {
+			return self.fileSystem.getFile(path).file.content;
+		} else {
+			return null;
+		}
 	};
 
 	/**
@@ -311,6 +399,10 @@ var ConsoleModel = function(files) {
 		return self.fileSystem.fileExists(name) && self.fileSystem.getFile(name).file.type == 'directory';
 	};
 
+	self.writeFile = function(name, data) {
+		return self.fileSystem.write(name, true, data);
+	}
+
 	self.autoExecute = function(sentence) {
 		autoQueue.push(function(callback) {
 			writeOut(sentence, 75, callback);
@@ -320,14 +412,33 @@ var ConsoleModel = function(files) {
 
 	self.runAuto = function() {
 		if(autoQueue.length > 0) {
-			self.canType = false;
+			self.haltInput();
 			autoQueue.shift()(function() {
 					self.enterCommand();
 					self.runAuto();
 				});
 		} else {
-			self.canType = true;
+			self.enableInput();
 		}
+	};
+
+	self.haltInput = function() {
+		cursorActive = false;
+		stdInActive = false;
+	};
+
+	self.enableInput = function() {
+		cursorActive = true;
+		stdInActive = false;
+		self.stdIn('');
+	};
+
+	self.takeStdIn = function(callback) {
+		cursorActive = false;
+		stdInActive = true;
+		ctrlDhook = function() {
+			callback(self.stdIn());
+		};
 	};
 
 	//initialize view model
@@ -342,26 +453,26 @@ window.onload = function() {
 			'name' : 'readme.txt',
 			'type' : 'file',
 			'permissions' : {'w' : true, 'r' : true, 'x' : false},
-			'content' : '<p>Hello, my name is <span class="blue">Aaron Nech</span>. </p> \
+			'content' : '<span class="collapseSpace"><p>Hello, my name is <span class="blue">Aaron Nech</span>. </p> \
 						 <p>I\'m a aspiring Software Engineer in <span class="blue">Washington State</span>, and a student at the <span class="blue">University of Washington</span> department \
 						 of <span class="blue">Computer Science and Engineering</span>.<p> \
 						 <p>This is a project of mine called <span class="blue">KnockoutTerminal</span> which is available on my <a href="http://www.github.com/aaronnech">github</a>. \
 						 It uses a pseudo file system stored as a local JSON object, and allows for some \
 						 basic commands.</p> \
-						 <p>Here is a link to my <a href="http://www.aaronnech.com/blog">blog</a>. Where I write about various technology subjects and my projects.</p>'
+						 <p>Here is a link to my <a href="http://www.aaronnech.com/blog">blog</a>. Where I write about various technology subjects and my projects.</p></span>'
 		},
 		{
 			'name' : 'instructions.txt',
 			'type' : 'file',
 			'permissions' : {'w' : true, 'r' : true, 'x' : false},
-			'content' : '<p>KnockoutTerminal has the goal of being a fully expandable browser terminal with the ability to execute arbitrary commands stored in pseudo files. \
+			'content' : '<span class="collapseSpace"><p><span class="blue">KnockoutTerminal</span> has the goal of being a fully expandable browser terminal with the ability to execute arbitrary commands stored in pseudo files. \
 						Currently, the following <span class="blue">commands</span> are supported on this page:</p> \
-						<p><span class="blue">cat</span> &lt;file&gt;</p> \
-						<p><span class="blue">ls</span> [&lt;file&gt;]</p> \
-						<p><span class="blue">clear</span></p> \
-						<p><span class="blue">cd</span> &lt;directory&gt;</p> \
-						<p><span class="blue">wget</span> &lt;url&gt;</p> \
-						For more information check out the <a href="">KnockoutTerminal github repository</a>.'
+						<span class="blue">cat</span> &lt;file&gt;<br /> \
+						<span class="blue">ls</span> [&lt;file&gt;]<br /> \
+						<span class="blue">clear</span><br /> \
+						<span class="blue">cd</span> &lt;directory&gt;<br /> \
+						<span class="blue">wget</span> &lt;url&gt;<br /> \
+						For more information check out the <a href="https://github.com/aaronnech/KnockoutTerminal">KnockoutTerminal github repository</a>.</span>'
 		},
 		{
 			'name' : 'Projects',
@@ -372,8 +483,8 @@ window.onload = function() {
 					'name' : 'readme.txt',
 					'type' : 'file',
 					'permissions' : {'w' : true, 'r' : true, 'x' : false},
-					'content' : '<p>I have numerous side projects, I\'m currently building a projects page that is under construction.</p> \
-								<p>For my open source projects, please take a look at my <a href="http://www.github.com/aaronnech">github account</a>.</p>'
+					'content' : '<span class="collapseSpace"><p>I have numerous side projects, I\'m currently building a projects page that is under construction.</p> \
+								<p>For my open source projects, please take a look at my <a href="http://www.github.com/aaronnech">github account</a>.</p></span>'
 				}
 			]
 		}
