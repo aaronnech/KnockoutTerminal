@@ -33,7 +33,12 @@ a:hover {
 	text-decoration: underline;
 }
 
-#blink {
+#blinkCursor {
+	display: inline-block;
+	margin-left: -10px;
+}
+
+#blinkStdIn {
 	display: inline-block;
 	margin-left: -10px;
 }
@@ -42,4 +47,16 @@ a:hover {
 	list-style: none;
 	margin: 0;
 	padding: 0;
+}
+
+#stdInContent {
+	white-space: pre-wrap;
+}
+
+.historyItem {
+	white-space: pre-wrap;
+}
+
+.collapseSpace {
+	white-space: normal;
 }
